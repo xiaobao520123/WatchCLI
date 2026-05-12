@@ -15,7 +15,7 @@ settings:
     SWIFT_VERSION: "6.0"
     DEVELOPMENT_TEAM: "59QPR85897"
     CODE_SIGN_STYLE: Automatic
-    GENERATE_INFOPLIST_FILE: YES
+    GENERATE_INFOPLIST_FILE: NO
     ENABLE_USER_SCRIPT_SANDBOXING: YES
     SWIFT_STRICT_CONCURRENCY: minimal
     MARKETING_VERSION: "0.1.0"
@@ -34,9 +34,22 @@ targets:
       - target: WatchCLI Watch App
         embed: true
         codeSign: true
+    info:
+      path: Apps/iOSApp/Info.plist
+      properties:
+        CFBundleDisplayName: WatchCLI
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
     settings:
-        INFOPLIST_KEY_UILaunchScreen_Generation: YES
-        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait"
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.watchcli.WatchCLI
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 
   WatchCLI Watch App:
     type: application
@@ -47,15 +60,23 @@ targets:
     dependencies:
       - package: WatchCLI
         product: WatchCLIProtocol
+    info:
+      path: Apps/WatchApp/Info.plist
+      properties:
+        CFBundleDisplayName: WatchCLI
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        WKApplication: true
+        WKCompanionAppBundleIdentifier: dev.watchcli.WatchCLI
+        WKWatchOnly: false
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.watchcli.WatchCLI.watchkitapp
         TARGETED_DEVICE_FAMILY: "4"
         WATCHOS_DEPLOYMENT_TARGET: "10.0"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        INFOPLIST_KEY_CFBundleDisplayName: WatchCLI
-        INFOPLIST_KEY_WKApplication: YES
-        INFOPLIST_KEY_WKCompanionAppBundleIdentifier: dev.watchcli.WatchCLI
 
 schemes:
   WatchCLI:

@@ -72,6 +72,7 @@ xcodebuild \
     -configuration Release \
     -destination "$DEST" \
     -allowProvisioningUpdates \
+    -allowProvisioningDeviceRegistration \
     -skipPackagePluginValidation -skipMacroValidation \
     build 2>&1 | xcbeautify 2>/dev/null || \
 xcodebuild \
@@ -80,6 +81,7 @@ xcodebuild \
     -configuration Release \
     -destination "$DEST" \
     -allowProvisioningUpdates \
+    -allowProvisioningDeviceRegistration \
     -skipPackagePluginValidation -skipMacroValidation \
     build | tail -5
 

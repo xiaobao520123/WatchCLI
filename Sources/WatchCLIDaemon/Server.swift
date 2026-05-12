@@ -5,7 +5,7 @@ import Logging
 import WatchCLIProtocol
 
 public enum DaemonVersion {
-    public static let current = "0.2.0"
+    public static let current = "0.3.0"
 }
 
 /// Builds a Hummingbird application configured with the WatchCLI routes.

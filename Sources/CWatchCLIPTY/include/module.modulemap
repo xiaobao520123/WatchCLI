@@ -1,0 +1,4 @@
+module CWatchCLIPTY {
+    header "watchcli_pty.h"
+    export *
+}

@@ -5,7 +5,7 @@ import Logging
 import WatchCLIProtocol
 
 public enum DaemonVersion {
-    public static let current = "0.1.0"
+    public static let current = "0.2.0"
 }
 
 /// Builds a Hummingbird application configured with the WatchCLI routes.
@@ -24,7 +24,6 @@ public func makeApplication(config: DaemonConfig, token: String, logger: Logger?
     router.ws(
         "/v1/session",
         shouldUpgrade: { request, _ in
-            // Accept token via `Authorization: Bearer <t>` or `?token=<t>`.
             let presented: String? = {
                 if let h = request.headers[.authorization],
                    h.lowercased().hasPrefix("bearer ") {
@@ -42,7 +41,7 @@ public func makeApplication(config: DaemonConfig, token: String, logger: Logger?
             }
             return .upgrade([:])
         },
-        onUpgrade: { inbound, outbound, context in
+        onUpgrade: { inbound, outbound, _ in
             await SessionHandler(config: config, log: log).run(inbound: inbound, outbound: outbound)
         }
     )
@@ -60,8 +59,10 @@ public func makeApplication(config: DaemonConfig, token: String, logger: Logger?
 actor SessionHandler {
     let config: DaemonConfig
     let log: Logger
-    private var agent: String = ""
-    private var currentTask: Task<Void, Never>?
+    private var spec: AgentSpec?
+    private var pty: PTYProcess?
+    private var pumpTask: Task<Void, Never>?
+    private var oneshotTask: Task<Void, Never>?
 
     init(config: DaemonConfig, log: Logger) {
         self.config = config
@@ -91,7 +92,17 @@ actor SessionHandler {
         } catch {
             log.warning("session ended: \(error)")
         }
-        currentTask?.cancel()
+        await cleanup()
+    }
+
+    private func cleanup() async {
+        pumpTask?.cancel(); pumpTask = nil
+        oneshotTask?.cancel(); oneshotTask = nil
+        if let pty {
+            pty.signal(SIGHUP)
+            _ = await pty.waitForExit()
+        }
+        pty = nil
     }
 
     private func handle(_ msg: ClientMessage, outbound: WebSocketOutboundWriter) async {
@@ -101,44 +112,96 @@ actor SessionHandler {
                 try? await send(.error(.init(code: "agent.notAllowed", message: "agent '\(p.agent)' not in allowlist")), via: outbound)
                 return
             }
-            agent = p.agent
-            try? await send(.output(.init(stream: .stdout, data: "[watchcli] agent=\(p.agent) ready\n")), via: outbound)
+            let registry = BuiltInAgents.registry(shellPath: config.shellPath)
+            guard let spec = registry[p.agent] else {
+                try? await send(.error(.init(code: "agent.unknown", message: "no such agent '\(p.agent)'")), via: outbound)
+                return
+            }
+            self.spec = spec
+
+            switch spec.mode {
+            case .oneshot:
+                try? await send(.output(.init(stream: .stdout, data: "[watchcli] agent=\(spec.name) (oneshot) ready\n")), via: outbound)
+            case .pty:
+                await startPTY(spec: spec, cols: p.cols, rows: p.rows, env: p.env, outbound: outbound)
+            }
 
         case .input(let p):
-            guard !agent.isEmpty else {
+            guard let spec else {
                 try? await send(.error(.init(code: "session.notStarted", message: "send `start` first")), via: outbound)
                 return
             }
-            let line = p.data.trimmingCharacters(in: .newlines)
-            guard !line.isEmpty else { return }
-            currentTask?.cancel()
-            let runner = CommandRunner(shellPath: config.shellPath)
-            let argv = runner.command(for: agent, line: line)
-            currentTask = Task { [weak self] in
-                guard let self else { return }
-                for await event in runner.run(argv) {
-                    if Task.isCancelled { break }
-                    switch event {
-                    case .stdout(let s): try? await self.send(.output(.init(stream: .stdout, data: s)), via: outbound)
-                    case .stderr(let s): try? await self.send(.output(.init(stream: .stderr, data: s)), via: outbound)
-                    case .exit(let code):
-                        try? await self.send(.output(.init(stream: .stdout, data: "\n[exit \(code)]\n")), via: outbound)
-                    }
-                }
+            switch spec.mode {
+            case .oneshot: await runOneshot(spec: spec, line: p.data, outbound: outbound)
+            case .pty:     try? pty?.write(Data(p.data.utf8))
             }
 
-        case .resize:
-            // No-op until P6 (PTY).
-            break
+        case .resize(let r):
+            pty?.resize(cols: r.cols, rows: r.rows)
 
-        case .signal:
-            currentTask?.cancel()
+        case .signal(let s):
+            if let pty {
+                pty.signal(s.signal)
+            } else {
+                oneshotTask?.cancel()
+            }
 
         case .ping(let id):
             try? await send(.pong(id: id), via: outbound)
 
         case .stop:
-            currentTask?.cancel()
+            await cleanup()
+        }
+    }
+
+    private func runOneshot(spec: AgentSpec, line: String, outbound: WebSocketOutboundWriter) async {
+        let trimmed = line.trimmingCharacters(in: .newlines)
+        guard !trimmed.isEmpty else { return }
+        oneshotTask?.cancel()
+        let runner = CommandRunner(shellPath: config.shellPath)
+        let argv = spec.argv + [trimmed]
+        oneshotTask = Task { [weak self] in
+            guard let self else { return }
+            for await event in runner.run(argv) {
+                if Task.isCancelled { break }
+                switch event {
+                case .stdout(let s): try? await self.send(.output(.init(stream: .stdout, data: s)), via: outbound)
+                case .stderr(let s): try? await self.send(.output(.init(stream: .stderr, data: s)), via: outbound)
+                case .exit(let code):
+                    try? await self.send(.output(.init(stream: .stdout, data: "\n[exit \(code)]\n")), via: outbound)
+                }
+            }
+        }
+    }
+
+    private func startPTY(spec: AgentSpec, cols: UInt16, rows: UInt16, env: [String: String]?, outbound: WebSocketOutboundWriter) async {
+        do {
+            // Inherit a sensible TERM if the client didn't specify one.
+            var environment = ProcessInfo.processInfo.environment
+            if let env { environment.merge(env, uniquingKeysWith: { $1 }) }
+            if environment["TERM"] == nil { environment["TERM"] = "xterm-256color" }
+
+            let executable = spec.argv[0]
+            let arguments  = Array(spec.argv.dropFirst())
+            let pty = try PTYProcess.spawn(
+                executable: executable, arguments: arguments,
+                environment: environment, cols: cols, rows: rows
+            )
+            self.pty = pty
+
+            // Pump stdout: PTY → outbound `output` messages.
+            pumpTask = Task { [weak self, log] in
+                guard let self else { return }
+                for await chunk in pty.read() {
+                    let text = String(decoding: chunk, as: UTF8.self)
+                    try? await self.send(.output(.init(stream: .stdout, data: text)), via: outbound)
+                }
+                let code = await pty.waitForExit()
+                log.info("pty child exited code=\(code)")
+                try? await self.send(.exit(.init(code: code)), via: outbound)
+            }
+        } catch {
+            try? await send(.error(.init(code: "pty.spawn", message: "\(error)")), via: outbound)
         }
     }
 

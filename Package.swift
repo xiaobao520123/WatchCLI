@@ -21,10 +21,16 @@ let package = Package(
             name: "WatchCLIProtocol",
             path: "Sources/WatchCLIProtocol"
         ),
+        .target(
+            name: "CWatchCLIPTY",
+            path: "Sources/CWatchCLIPTY",
+            publicHeadersPath: "include"
+        ),
         .executableTarget(
             name: "WatchCLIDaemon",
             dependencies: [
                 "WatchCLIProtocol",
+                "CWatchCLIPTY",
                 .product(name: "Hummingbird", package: "hummingbird"),
                 .product(name: "HummingbirdWebSocket", package: "hummingbird-websocket"),
             ],
@@ -40,6 +46,7 @@ let package = Package(
             dependencies: [
                 "WatchCLIDaemon",
                 "WatchCLIProtocol",
+                "CWatchCLIPTY",
                 .product(name: "HummingbirdWSClient", package: "hummingbird-websocket"),
             ],
             path: "Tests/WatchCLIDaemonTests"

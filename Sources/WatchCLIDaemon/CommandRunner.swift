@@ -18,17 +18,10 @@ public struct CommandRunner: Sendable {
         self.shellPath = shellPath
     }
 
-    /// Resolve an agent name to a concrete command. The `shell` agent runs
-    /// the user's input verbatim through `$SHELL -c`. Other agents are still
-    /// shelled for now (they'll get PTY treatment in P6) so e.g. `claude`
-    /// just becomes `claude <args>`.
+    /// Resolve an agent name to a concrete one-shot command. The current
+    /// `oneshot` agent runs the user's input verbatim through `$SHELL -c`.
     public func command(for agent: String, line: String) -> [String] {
-        switch agent {
-        case "shell":   return [shellPath, "-l", "-c", line]
-        case "claude":  return [shellPath, "-l", "-c", "claude \(shellQuote(line))"]
-        case "copilot": return [shellPath, "-l", "-c", "copilot \(shellQuote(line))"]
-        default:        return [shellPath, "-l", "-c", line]
-        }
+        [shellPath, "-l", "-c", line]
     }
 
     /// Spawn the child and return an async stream of events. The returned

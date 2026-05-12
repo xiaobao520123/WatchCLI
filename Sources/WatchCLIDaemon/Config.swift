@@ -12,7 +12,7 @@ public struct DaemonConfig: Sendable {
         host: "127.0.0.1",
         port: 8765,
         shellPath: ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh",
-        allowedAgents: ["shell", "claude", "copilot"],
+        allowedAgents: ["shell", "claude", "copilot", "oneshot"],
         tokenFilePath: defaultTokenFilePath()
     )
 

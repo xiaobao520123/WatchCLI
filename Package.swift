@@ -37,7 +37,11 @@ let package = Package(
         ),
         .testTarget(
             name: "WatchCLIDaemonTests",
-            dependencies: ["WatchCLIDaemon", "WatchCLIProtocol"],
+            dependencies: [
+                "WatchCLIDaemon",
+                "WatchCLIProtocol",
+                .product(name: "HummingbirdWSClient", package: "hummingbird-websocket"),
+            ],
             path: "Tests/WatchCLIDaemonTests"
         ),
     ]

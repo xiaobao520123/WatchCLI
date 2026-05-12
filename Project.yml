@@ -13,7 +13,7 @@ packages:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    DEVELOPMENT_TEAM: ""
+    DEVELOPMENT_TEAM: "59QPR85897"
     CODE_SIGN_STYLE: Automatic
     GENERATE_INFOPLIST_FILE: YES
     ENABLE_USER_SCRIPT_SANDBOXING: YES
@@ -31,12 +31,10 @@ targets:
     dependencies:
       - package: WatchCLI
         product: WatchCLIProtocol
+      - target: WatchCLI Watch App
+        embed: true
+        codeSign: true
     settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: dev.watchcli.WatchCLI
-        TARGETED_DEVICE_FAMILY: "1,2"
-        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        INFOPLIST_KEY_CFBundleDisplayName: WatchCLI
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait"
 

@@ -10,10 +10,20 @@ public enum Theme {
     public static let prompt     = Color(red: 0.49, green: 0.83, blue: 0.99) // #7DD3FC
     public static let muted      = Color(red: 0.61, green: 0.64, blue: 0.69) // #9CA3AF
     public static let textPrimary = Color(red: 0.93, green: 0.93, blue: 0.94)
+    public static let copilot    = Color(red: 0.45, green: 0.85, blue: 0.55) // #73D98B
+    public static let claude     = Color(red: 1.00, green: 0.48, blue: 0.24) // same as accent
+    public static let shellTone  = Color(red: 0.49, green: 0.83, blue: 0.99) // cyan
 
-    /// Monospaced font tuned for small screens. Uses the system mono so it
-    /// inherits Dynamic Type sizes on watchOS / iOS.
-    public static func mono(_ style: Font.TextStyle = .body) -> Font {
+    /// Compact monospaced font tuned for the watch face. The footnote/caption
+    /// styles inherit Dynamic Type so users with larger Watch text scaling
+    /// still get readable output.
+    public static func mono(_ style: Font.TextStyle = .caption2) -> Font {
         .system(style, design: .monospaced)
+    }
+
+    /// Fixed point size for terminal output. caption2 is too small in
+    /// Dynamic Type some users — but on the watch we *want* density.
+    public static func monoFixed(_ size: CGFloat = 11) -> Font {
+        .system(size: size, weight: .regular, design: .monospaced)
     }
 }

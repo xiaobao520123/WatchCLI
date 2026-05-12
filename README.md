@@ -72,14 +72,14 @@ Modules in this repo (one root `Package.swift`):
 # 1. Build everything (regenerates the Xcode project)
 ./scripts/build.sh
 
-# 2. Run all tests (27 of them)
+# 2. Run all tests (39 of them)
 ./scripts/test.sh
 
 # 3. Start the daemon on your Mac — prints the token on first launch
 ./scripts/run-daemon.sh
 
-# 4. Open the apps in Xcode and run them on a paired iPhone+Watch
-open WatchCLI.xcodeproj
+# 4. Install on your real iPhone + paired Apple Watch
+./scripts/install-on-device.sh        # see Docs/INSTALL_ON_DEVICE.md
 ```
 
 In the iPhone app, add an endpoint:

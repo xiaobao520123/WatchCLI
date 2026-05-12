@@ -1,20 +1,25 @@
 import SwiftUI
 import WatchCLIProtocol
 
-/// Live terminal pane backed by `SessionViewModel`. Auto-scrolls to bottom
-/// as new lines arrive; falls back to a friendly hint when there's nothing
-/// to show yet.
+/// Live terminal pane backed by `SessionViewModel`. Shows the styled
+/// `WelcomeView` when there's no output yet; otherwise renders the
+/// streamed lines with auto-scroll.
 struct TerminalView: View {
     @EnvironmentObject var session: SessionViewModel
     @EnvironmentObject var store: EndpointStore
+
+    private var hasContent: Bool {
+        // Treat any non-system / non-banner line as "real" content.
+        session.lines.contains { $0.kind == .stdout || $0.kind == .stderr || $0.kind == .prompt }
+    }
 
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
-                    header
-                    if session.lines.isEmpty {
-                        emptyHint
+                    statusPill
+                    if !hasContent {
+                        WelcomeView()
                     } else {
                         ForEach(session.lines) { line in
                             Text(line.text.isEmpty ? " " : line.text)
@@ -41,36 +46,23 @@ struct TerminalView: View {
         .navigationTitle("watchcli")
     }
 
-    private var header: some View {
+    private var statusPill: some View {
         HStack(spacing: 4) {
             Circle().fill(stateColor).frame(width: 6, height: 6)
-            Text(stateLabel).font(Theme.mono(.caption2)).foregroundStyle(Theme.muted)
+            Text(stateLabel)
+                .font(Theme.mono(.caption2))
+                .foregroundStyle(Theme.muted)
             Spacer()
         }
         .padding(.bottom, 2)
     }
 
-    private var emptyHint: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("WatchCLI v0.1").foregroundStyle(Theme.accent)
-            Text("protocol v1").foregroundStyle(Theme.muted)
-            if store.endpoints.isEmpty {
-                Text("Add a server in the iPhone app, then it appears in the Servers tab.")
-                    .foregroundStyle(Theme.muted)
-            } else {
-                Text("Pick a server in the Servers tab and dictate a command in Compose.")
-                    .foregroundStyle(Theme.muted)
-            }
-        }
-        .font(Theme.mono(.footnote))
-    }
-
     private var stateColor: Color {
         switch session.state {
         case .idle:                 Theme.muted
-        case .connecting:           Color.yellow
-        case .connected:            Color.green
-        case .disconnected:         Color.red
+        case .connecting:           .yellow
+        case .connected:            .green
+        case .disconnected:         .red
         }
     }
     private var stateLabel: String {

@@ -71,6 +71,7 @@ targets:
         WKWatchOnly: false
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
+        NSMicrophoneUsageDescription: "WatchCLI uses the microphone to dictate commands to your remote shell."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.watchcli.WatchCLI.watchkitapp

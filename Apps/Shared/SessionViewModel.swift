@@ -67,7 +67,7 @@ public final class SessionViewModel: ObservableObject {
     private var stderrSplitter = LineSplitter()
     private var pumpTask: Task<Void, Never>?
     private var reconnectTask: Task<Void, Never>?
-    private var currentEndpoint: Endpoint?
+    public private(set) var currentEndpoint: Endpoint?
     private var reconnectAttempt = 0
     private var userInitiatedDisconnect = false
 
@@ -90,11 +90,42 @@ public final class SessionViewModel: ObservableObject {
     public func send(line raw: String) {
         let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
-        appendLine(.init(text: "$ \(text)", kind: .prompt))
         Haptics.play(.click)
+        // Local slash commands short-circuit before going to the wire.
+        if let cmd = SlashCatalog.all.first(where: { $0.id == text }), cmd.kind == .local {
+            handleLocalSlash(cmd)
+            return
+        }
+        appendLine(.init(text: "$ \(text)", kind: .prompt))
         Task { [weak self] in
             guard let self, let client = await self.currentClient() else { return }
             try? await client.send(.input(.init(data: text + "\n")))
+        }
+    }
+
+    private func handleLocalSlash(_ cmd: SlashCommand) {
+        switch cmd.id {
+        case "/help":
+            appendLine(.init(text: "$ /help", kind: .prompt))
+            for c in SlashCatalog.all {
+                appendLine(.init(text: "  \(c.id.padding(toLength: 12, withPad: " ", startingAt: 0))\(c.description)", kind: .system))
+            }
+        case "/clear":
+            clear()
+        case "/disconnect":
+            appendLine(.init(text: "$ /disconnect", kind: .prompt))
+            Task { await disconnect() }
+        case "/reconnect":
+            appendLine(.init(text: "$ /reconnect", kind: .prompt))
+            if let endpoint = currentEndpoint {
+                connect(to: endpoint)
+            } else {
+                appendLine(.init(text: "✗ no endpoint selected", kind: .stderr))
+            }
+        default:
+            // Non-local but somehow got here — fall back to wire.
+            appendLine(.init(text: "$ \(cmd.id)", kind: .prompt))
+            Task { try? await self.client?.send(.input(.init(data: cmd.id + "\n"))) }
         }
     }
 

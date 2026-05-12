@@ -21,6 +21,38 @@ public func makeApplication(config: DaemonConfig, token: String, logger: Logger?
                         body: .init(byteBuffer: ByteBuffer(string: body)))
     }
 
+    // POST /v1/transcribe — accepts raw audio bytes (m4a/wav/webm), proxies
+    // to OpenAI Whisper using the daemon's locally-stored API key, returns
+    // {"text":"…"}. Same bearer-token auth as the WS endpoint.
+    let whisper = WhisperClient.loadDefault()
+    router.post("/v1/transcribe") { request, context -> Response in
+        let presented: String? = {
+            if let h = request.headers[.authorization], h.lowercased().hasPrefix("bearer ") {
+                return String(h.dropFirst(7)).trimmingCharacters(in: .whitespaces)
+            }
+            return request.uri.queryParameters.get("token").map { String($0) }
+        }()
+        guard let presented, constantTimeEquals(presented, token) else {
+            return Response(status: .unauthorized, body: .init(byteBuffer: ByteBuffer(string: #"{"error":"auth"}"#)))
+        }
+        // Buffer the audio payload (small; capped at 5 MB).
+        let buffer = try await request.body.collect(upTo: 5 * 1024 * 1024)
+        let audio = Data(buffer.readableBytesView)
+        do {
+            let text = try await whisper.transcribe(audio: audio, filename: "audio.m4a")
+            let json = #"{"text":\#(jsonString(text))}"#
+            return Response(status: .ok,
+                            headers: [.contentType: "application/json"],
+                            body: .init(byteBuffer: ByteBuffer(string: json)))
+        } catch {
+            log.warning("transcribe failed: \(error)")
+            let json = #"{"error":\#(jsonString("\(error)"))}"#
+            return Response(status: .internalServerError,
+                            headers: [.contentType: "application/json"],
+                            body: .init(byteBuffer: ByteBuffer(string: json)))
+        }
+    }
+
     router.ws(
         "/v1/session",
         shouldUpgrade: { request, _ in
@@ -209,4 +241,22 @@ actor SessionHandler {
         let json = try WireCodec.encode(message)
         try await outbound.write(.text(json))
     }
+}
+
+/// Minimal JSON string escaper for inlining short messages in synthesized JSON.
+fileprivate func jsonString(_ s: String) -> String {
+    var out = "\""
+    for c in s.unicodeScalars {
+        switch c {
+        case "\"": out += "\\\""
+        case "\\": out += "\\\\"
+        case "\n": out += "\\n"
+        case "\r": out += "\\r"
+        case "\t": out += "\\t"
+        case _ where c.value < 0x20: out += String(format: "\\u%04x", c.value)
+        default: out.unicodeScalars.append(c)
+        }
+    }
+    out += "\""
+    return out
 }

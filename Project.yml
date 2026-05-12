@@ -1,0 +1,72 @@
+name: WatchCLI
+options:
+  bundleIdPrefix: dev.watchcli
+  deploymentTarget:
+    iOS: "17.0"
+    watchOS: "10.0"
+  createIntermediateGroups: true
+
+packages:
+  WatchCLI:
+    path: .
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+    GENERATE_INFOPLIST_FILE: YES
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    SWIFT_STRICT_CONCURRENCY: minimal
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+targets:
+  WatchCLI:
+    type: application
+    platform: iOS
+    sources:
+      - path: Apps/iOSApp
+      - path: Apps/Shared
+    dependencies:
+      - package: WatchCLI
+        product: WatchCLIProtocol
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.watchcli.WatchCLI
+        TARGETED_DEVICE_FAMILY: "1,2"
+        INFOPLIST_KEY_CFBundleDisplayName: WatchCLI
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait"
+
+  WatchCLI Watch App:
+    type: application
+    platform: watchOS
+    sources:
+      - path: Apps/WatchApp
+      - path: Apps/Shared
+    dependencies:
+      - package: WatchCLI
+        product: WatchCLIProtocol
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.watchcli.WatchCLI.watchkitapp
+        TARGETED_DEVICE_FAMILY: "4"
+        WATCHOS_DEPLOYMENT_TARGET: "10.0"
+        INFOPLIST_KEY_CFBundleDisplayName: WatchCLI
+        INFOPLIST_KEY_WKApplication: YES
+        INFOPLIST_KEY_WKCompanionAppBundleIdentifier: dev.watchcli.WatchCLI
+
+schemes:
+  WatchCLI:
+    build:
+      targets:
+        WatchCLI: all
+    run:
+      config: Debug
+  WatchCLI Watch App:
+    build:
+      targets:
+        WatchCLI Watch App: all
+    run:
+      config: Debug

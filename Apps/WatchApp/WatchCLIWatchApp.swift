@@ -4,6 +4,7 @@ import WatchCLIProtocol
 @main
 struct WatchCLIWatchApp: App {
     @StateObject private var store = EndpointStore()
+    @StateObject private var prefs = Preferences()
     @StateObject private var manager = SessionManager()
     @State private var sync: EndpointSyncBridge?
 
@@ -11,12 +12,13 @@ struct WatchCLIWatchApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(store)
+                .environmentObject(prefs)
                 .environmentObject(manager)
                 .preferredColorScheme(.dark)
                 .tint(Theme.accent)
                 .task {
-                    if sync == nil { sync = EndpointSyncBridge(store: store) }
-                    if manager.tabs.isEmpty, let first = store.endpoints.first {
+                    if sync == nil { sync = EndpointSyncBridge(store: store, prefs: prefs) }
+                    if prefs.autoConnect, manager.tabs.isEmpty, let first = store.endpoints.first {
                         _ = manager.add(endpoint: first)
                     }
                 }
@@ -24,70 +26,52 @@ struct WatchCLIWatchApp: App {
     }
 }
 
-/// Root layout: a horizontal page-style TabView that contains all open
-/// terminal sessions plus a final "+" page used as a swipe-create surface.
-/// Swipe past the last real tab → land on the New page → tap a row to spawn
-/// that session, which auto-becomes the active tab.
 private struct RootView: View {
     @EnvironmentObject var store: EndpointStore
     @EnvironmentObject var manager: SessionManager
+    @EnvironmentObject var prefs: Preferences
+    @State private var crownActive: Double = 0
+    @State private var showingActions = false
 
-    /// Effective number of pages = real tabs + 1 (the New page).
     private var pageCount: Int { manager.tabs.count + 1 }
 
     var body: some View {
-        ZStack(alignment: .top) {
+        VStack(spacing: 0) {
+            TabStrip(showingActions: $showingActions)
             TabView(selection: $manager.activeIndex) {
                 ForEach(Array(manager.tabs.enumerated()), id: \.element.id) { idx, tab in
                     TerminalSessionView(session: tab.sessionVM, agent: tab.agent)
                         .tag(idx)
                 }
-                NewTabPage()
-                    .tag(manager.tabs.count)   // sentinel: index == count
+                NewTabPage().tag(manager.tabs.count)
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
-
-            TabIndicatorBar(count: pageCount, active: manager.activeIndex)
-                .padding(.top, 2)
-                .allowsHitTesting(false)
         }
         .background(Theme.background.ignoresSafeArea())
-    }
-}
-
-/// Tiny page-control style indicator at the top: one dot per tab, last dot
-/// is a `+` glyph for the create-new page. Live status dot for active tab.
-private struct TabIndicatorBar: View {
-    @EnvironmentObject var manager: SessionManager
-    let count: Int
-    let active: Int
-
-    var body: some View {
-        HStack(spacing: 4) {
-            ForEach(0..<count, id: \.self) { idx in
-                Group {
-                    if idx == count - 1 {
-                        Image(systemName: "plus")
-                            .font(.system(size: 7, weight: .bold))
-                            .foregroundStyle(idx == active ? Theme.accent : Theme.muted.opacity(0.5))
-                    } else {
-                        Circle()
-                            .fill(idx == active ? Theme.accent : Theme.muted.opacity(0.4))
-                            .frame(width: idx == active ? 5 : 3,
-                                   height: idx == active ? 5 : 3)
-                    }
-                }
+        // Crown rotation switches tabs (when the slash picker isn't focused).
+        .focusable(prefs.crownTabSwitch && manager.tabs.count > 1)
+        .digitalCrownRotation(
+            $crownActive,
+            from: 0, through: Double(max(0, pageCount - 1)),
+            by: 1, sensitivity: .low,
+            isContinuous: false, isHapticFeedbackEnabled: prefs.hapticsEnabled
+        )
+        .onChange(of: crownActive) { _, new in
+            let target = max(0, min(Int(new.rounded()), pageCount - 1))
+            if target != manager.activeIndex {
+                manager.activeIndex = target
             }
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 2)
-        .background(Capsule().fill(Color.black.opacity(0.5)))
+        .onChange(of: manager.activeIndex) { _, new in
+            crownActive = Double(new)
+        }
+        .onAppear { crownActive = Double(manager.activeIndex) }
     }
 }
 
-/// The "+" sentinel page. Tap-to-spawn a session for any (server, agent)
-/// combo. Acts as the swipe-create surface — swiping past the last real
-/// tab brings you here.
+/// "New Tab" sentinel page — swipe past the last real tab to land here.
+/// Lists every (server, agent) pair as a fat tappable row + a Settings
+/// shortcut at the bottom.
 private struct NewTabPage: View {
     @EnvironmentObject var store: EndpointStore
     @EnvironmentObject var manager: SessionManager
@@ -110,7 +94,7 @@ private struct NewTabPage: View {
                     .foregroundStyle(Theme.muted)
 
                 if store.endpoints.isEmpty {
-                    Text("No servers. Open the iPhone app to add one.")
+                    Text("No servers yet. Open the iPhone Settings to add one.")
                         .font(Theme.monoFixed(8))
                         .foregroundStyle(Theme.muted)
                         .padding(.top, 6)
@@ -149,6 +133,12 @@ private struct NewTabPage: View {
                         .padding(.vertical, 2)
                     }
                 }
+
+                Text("Edit servers, voice mode and other prefs in the iPhone app.")
+                    .font(Theme.monoFixed(7))
+                    .foregroundStyle(Theme.muted)
+                    .padding(.top, 6)
+                    .lineLimit(3)
             }
             .padding(8)
         }

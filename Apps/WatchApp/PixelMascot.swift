@@ -7,8 +7,6 @@ struct PixelMascot: View {
     var pixel: CGFloat = 4
     var color: Color = Theme.accent
 
-    // 12-col x 11-row grid. 1 = filled, 0 = transparent.
-    // Designed to match the silhouette from the reference screenshot.
     private static let grid: [[Int]] = [
         [0,0,1,0,0,0,0,0,0,1,0,0],
         [0,0,0,1,0,0,0,0,1,0,0,0],
@@ -38,8 +36,4 @@ struct PixelMascot: View {
                height: pixel * CGFloat(Self.grid.count))
         .accessibilityHidden(true)
     }
-}
-
-#Preview {
-    PixelMascot(pixel: 8).background(Theme.background)
 }

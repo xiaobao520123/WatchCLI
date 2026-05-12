@@ -1,6 +1,9 @@
 import Foundation
 import SwiftUI
 import WatchCLIProtocol
+#if os(watchOS)
+import WatchKit
+#endif
 
 /// SwiftUI-side line model: a chunk + a UUID for ForEach + a Color binding.
 public struct TerminalLine: Identifiable, Equatable, Sendable {
@@ -25,8 +28,31 @@ public struct TerminalLine: Identifiable, Equatable, Sendable {
     }
 }
 
+/// Plays a haptic on watchOS; no-op elsewhere.
+@MainActor
+enum Haptics {
+    static func play(_ type: HapticType) {
+        #if os(watchOS)
+        WKInterfaceDevice.current().play(type.wkType)
+        #endif
+    }
+    enum HapticType {
+        case click, success, failure, notification
+        #if os(watchOS)
+        var wkType: WKHapticType {
+            switch self {
+            case .click:        .click
+            case .success:      .success
+            case .failure:      .failure
+            case .notification: .notification
+            }
+        }
+        #endif
+    }
+}
+
 /// MainActor view-model owned by the watchOS app. Mediates between the
-/// `DaemonClient` and SwiftUI views.
+/// `DaemonClient` and SwiftUI views, owns reconnect/backoff and haptics.
 @MainActor
 public final class SessionViewModel: ObservableObject {
     public enum State: Equatable, Sendable { case idle, connecting, connected, disconnected(String?) }
@@ -40,6 +66,10 @@ public final class SessionViewModel: ObservableObject {
     private var stdoutSplitter = LineSplitter()
     private var stderrSplitter = LineSplitter()
     private var pumpTask: Task<Void, Never>?
+    private var reconnectTask: Task<Void, Never>?
+    private var currentEndpoint: Endpoint?
+    private var reconnectAttempt = 0
+    private var userInitiatedDisconnect = false
 
     public init() {}
 
@@ -51,6 +81,9 @@ public final class SessionViewModel: ObservableObject {
     }
 
     public func connect(to endpoint: Endpoint) {
+        currentEndpoint = endpoint
+        userInitiatedDisconnect = false
+        reconnectAttempt = 0
         Task { [weak self] in await self?.connectAsync(to: endpoint) }
     }
 
@@ -58,15 +91,26 @@ public final class SessionViewModel: ObservableObject {
         let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         appendLine(.init(text: "$ \(text)", kind: .prompt))
+        Haptics.play(.click)
         Task { [weak self] in
             guard let self, let client = await self.currentClient() else { return }
             try? await client.send(.input(.init(data: text + "\n")))
         }
     }
 
+    /// Sends an interrupt (^C) to the active session.
+    public func interrupt() {
+        Haptics.play(.click)
+        Task { [weak self] in
+            guard let self, let client = await self.currentClient() else { return }
+            try? await client.send(.signal(.init(signal: 2)))
+        }
+    }
+
     public func disconnect() async {
-        pumpTask?.cancel()
-        pumpTask = nil
+        userInitiatedDisconnect = true
+        reconnectTask?.cancel(); reconnectTask = nil
+        pumpTask?.cancel(); pumpTask = nil
         await client?.disconnect()
         client = nil
         if case .connected = state { state = .disconnected(nil) }
@@ -83,7 +127,13 @@ public final class SessionViewModel: ObservableObject {
     private func currentClient() async -> DaemonClient? { client }
 
     private func connectAsync(to endpoint: Endpoint) async {
-        await disconnect()
+        // Tear down any prior session without flipping userInitiatedDisconnect.
+        let wasUserInitiated = userInitiatedDisconnect
+        pumpTask?.cancel(); pumpTask = nil
+        await client?.disconnect()
+        client = nil
+        userInitiatedDisconnect = wasUserInitiated
+
         let c = DaemonClient(endpoint: endpoint)
         self.client = c
         self.state = .connecting
@@ -105,11 +155,15 @@ public final class SessionViewModel: ObservableObject {
         switch event {
         case .connected:
             state = .connected
+            reconnectAttempt = 0
+            Haptics.play(.success)
         case .disconnected(let reason):
             state = .disconnected(reason)
             for c in stdoutSplitter.flush(kind: .stdout) { appendLine(.init(chunk: c)) }
             for c in stderrSplitter.flush(kind: .stderr) { appendLine(.init(chunk: c)) }
             appendLine(.init(text: "✗ disconnected\(reason.map { " (\($0))" } ?? "")", kind: .system))
+            Haptics.play(.failure)
+            scheduleReconnectIfNeeded()
         case .message(let m):
             applyServerMessage(m)
         }
@@ -129,8 +183,23 @@ public final class SessionViewModel: ObservableObject {
             appendLine(.init(text: "! \(p.code): \(p.message)", kind: .stderr))
         case .exit(let p):
             appendLine(.init(text: "[exit \(p.code)]", kind: .system))
+            Haptics.play(.notification)
         case .pong:
             break
+        }
+    }
+
+    private func scheduleReconnectIfNeeded() {
+        guard !userInitiatedDisconnect, let endpoint = currentEndpoint else { return }
+        reconnectAttempt = min(reconnectAttempt + 1, 6)
+        // 1s, 2s, 4s, 8s, 16s, 30s (capped).
+        let delaySeconds = min(30.0, pow(2.0, Double(reconnectAttempt - 1)))
+        appendLine(.init(text: "↻ reconnect in \(Int(delaySeconds))s (attempt \(reconnectAttempt))", kind: .system))
+        reconnectTask?.cancel()
+        reconnectTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delaySeconds))
+            guard let self, !Task.isCancelled else { return }
+            await self.connectAsync(to: endpoint)
         }
     }
 

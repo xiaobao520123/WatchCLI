@@ -1,0 +1,94 @@
+name: WatchCLI
+options:
+  bundleIdPrefix: dev.watchcli
+  deploymentTarget:
+    iOS: "17.0"
+    watchOS: "10.0"
+  createIntermediateGroups: true
+
+packages:
+  WatchCLI:
+    path: .
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    DEVELOPMENT_TEAM: "59QPR85897"
+    CODE_SIGN_STYLE: Automatic
+    GENERATE_INFOPLIST_FILE: NO
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    SWIFT_STRICT_CONCURRENCY: minimal
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+targets:
+  WatchCLI:
+    type: application
+    platform: iOS
+    sources:
+      - path: Apps/iOSApp
+      - path: Apps/Shared
+    dependencies:
+      - package: WatchCLI
+        product: WatchCLIProtocol
+      - target: WatchCLI Watch App
+        embed: true
+        codeSign: true
+    info:
+      path: Apps/iOSApp/Info.plist
+      properties:
+        CFBundleDisplayName: WatchCLI
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.watchcli.WatchCLI
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+
+  WatchCLI Watch App:
+    type: application
+    platform: watchOS
+    sources:
+      - path: Apps/WatchApp
+      - path: Apps/Shared
+    dependencies:
+      - package: WatchCLI
+        product: WatchCLIProtocol
+    info:
+      path: Apps/WatchApp/Info.plist
+      properties:
+        CFBundleDisplayName: WatchCLI
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        WKApplication: true
+        WKCompanionAppBundleIdentifier: dev.watchcli.WatchCLI
+        WKWatchOnly: false
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+        NSMicrophoneUsageDescription: "WatchCLI uses the microphone to dictate commands to your remote shell."
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.watchcli.WatchCLI.watchkitapp
+        TARGETED_DEVICE_FAMILY: "4"
+        WATCHOS_DEPLOYMENT_TARGET: "10.0"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+
+schemes:
+  WatchCLI:
+    build:
+      targets:
+        WatchCLI: all
+    run:
+      config: Debug
+  WatchCLI Watch App:
+    build:
+      targets:
+        WatchCLI Watch App: all
+    run:
+      config: Debug

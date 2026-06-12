@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Place this at:  ~/Library/LaunchAgents/dev.watchcli.daemon.plist
+  Then run:       launchctl load -w ~/Library/LaunchAgents/dev.watchcli.daemon.plist
+
+  After load, the daemon runs at user login and restarts on crash.
+  Edit ProgramArguments / EnvironmentVariables to taste before installing.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>dev.watchcli.daemon</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <!-- Replace with the absolute path printed by `swift build -c release --show-bin-path`. -->
+        <string>/usr/local/bin/watchcli-daemon</string>
+        <string>--host</string>
+        <string>0.0.0.0</string>
+        <string>--port</string>
+        <string>8765</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>SHELL</key>
+        <string>/bin/zsh</string>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/watchcli-daemon.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/watchcli-daemon.log</string>
+
+    <!-- Useful when debugging: throttle to once every 10 s on rapid restarts. -->
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+</dict>
+</plist>
